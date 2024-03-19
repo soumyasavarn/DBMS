@@ -124,7 +124,7 @@ locationClusters.forEach(cluster => {
     cluster.averageAge = cluster.cumulativeAge / cluster.storeCount;
 });
 
-const ageBasedRadiusScale = d3.scaleLinear().domain([0, d3.max(locationClusters, cluster => cluster.cumulativeAge)]).range([0, proximityDiameter / 2]);
+const ageBasedRadiusScale = d3.scaleLinear().domain([0, d3.max(locationClusters, cluster => cluster.cumulativeAge)]).range([2, proximityDiameter / 2]);
 const ageBasedColorScale = d3.scaleSequential(d3.interpolateInferno).domain([d3.max(locationClusters, cluster => cluster.cumulativeAge), 0]);
 
 locationBubbles.selectAll("circle").data(locationClusters).join("circle").attr("cx", cluster => cluster.centerX).attr("cy", cluster => cluster.centerY).attr("r", cluster => ageBasedRadiusScale(cluster.cumulativeAge)).attr("fill", cluster => ageBasedColorScale(cluster.cumulativeAge)).attr("opacity", 0.7).append("title").text(cluster => `Average Age: ${cluster.averageAge.toFixed(1)} years\nCount: ${cluster.storeCount}`);
