@@ -131,3 +131,170 @@ chart = {
     }
   });
 }
+
+//4.
+Chart =  {
+  const width = 928;
+  const height = 581;
+  const projection = d3.geoAlbersUsa().scale(4 / 3 * width).translate([width / 2, height / 2]);
+  const svg = d3.create("svg")
+    .attr("viewBox", [0, 0, width, height])
+    .attr("width", width)
+    .attr("height", height)
+    .attr("style", "max-width: 100%; height: auto;");
+
+  svg.append("path")
+    .datum(stateMesh)
+    .attr("fill", "none")
+    .attr("stroke", "#777")
+    .attr("stroke-width", 0.5)
+    .attr("stroke-linejoin", "round")
+    .attr("d", d3.geoPath(projection));
+
+  let stateYearlyCases = {};
+  aggregatedArray.forEach(item => {
+    Object.entries(item).forEach(([yearState, data]) => {
+      if (!stateYearlyCases[yearState]) {
+        stateYearlyCases[yearState] = {
+          year: data.year,
+          state: data.state,
+          cases: 0,
+          latitude: data.latitude,
+          longitude: data.longitude
+        };
+      }
+      stateYearlyCases[yearState].cases += data.cases;
+    });
+  });
+
+  let flatData = Object.values(stateYearlyCases);
+
+  const maxCases = d3.max(flatData, d => d.cases);
+  const radiusScale = d3.scaleSqrt().domain([d3.min(flatData, d => d.cases), maxCases]).range([0, 25]);
+
+  const circles = svg.selectAll("circle")
+    .data(flatData, d => `${d.year}-${d.state}`)
+    .enter().append("circle")
+      .attr("transform", d => {
+        const coords = projection([d.longitude, d.latitude]);
+        return coords ? `translate(${coords})` : null;
+      })
+      .attr("r", d => radiusScale(d.cases))
+      .attr("fill", d => d.cases > 5000 ? "#008080" : "#4682B4") // Change color scheme to blue/green
+      .attr("stroke", "white")
+      .attr("stroke-width", 1.5)
+      .append("title")
+      .text(d => `${d.year}-${d.state}: ${d.cases} total cases`);
+
+  const update = (year) => {
+    const yearData = flatData.filter(d => d.year === String(year));
+    svg.selectAll("circle")
+      .data(yearData, d => `${d.year}-${d.state}`)
+      .attr("r", d => radiusScale(d.cases))
+      .attr("fill", d => d.cases > 5000 ? "#008080" : "#4682B4");
+  }
+
+  const initialYear = d3.min(flatData, d => d.year);
+  update(initialYear);
+
+  return Object.assign(svg.node(), { update });
+};
+
+
+//5.
+Chart =  {
+  const width = 928;
+  const height = 581;
+  const projection = d3.geoAlbersUsa().scale(4 / 3 * width).translate([width / 2, height / 2]);
+
+  const svg = d3.create("svg")
+    .attr("viewBox", [0, 0, width, height])
+    .attr("width", width)
+    .attr("height", height)
+    .attr("style", "max-width: 100%; height: auto;");
+
+  svg.append("path")
+    .datum(stateMesh)
+    .attr("fill", "#f0f0f0")
+    .attr("stroke", "#888")
+    .attr("stroke-width", 1)
+    .attr("stroke-linejoin", "round")
+    .attr("d", d3.geoPath(projection));
+
+  let stateYearlyGenderCases = {};
+
+  Object.entries(processedData3).forEach(([disease, diseaseData]) => {
+    Object.entries(diseaseData).forEach(([yearStateGender, data]) => {
+      const [year, state, gender] = yearStateGender.split("-");
+      const key = `${year}-${state}-${gender}`;
+
+      if (!stateYearlyGenderCases[key]) {
+        stateYearlyGenderCases[key] = {
+          year,
+          state,
+          gender,
+          cases: 0,
+          latitude: data.latitude,
+          longitude: data.longitude,
+        };
+      }
+
+      stateYearlyGenderCases[key].cases += data.cases;
+    });
+  });
+
+  let flatData = Object.values(stateYearlyGenderCases);
+
+  const maxCases = d3.max(flatData, d => d.cases);
+  const radiusScale = d3.scaleSqrt().domain([d3.min(flatData, d => d.cases), maxCases]).range([0, 20]);
+
+  const colorScale = d3.scaleOrdinal()
+    .domain(["Male", "Female"])
+    .range(["#4CAF50", "#2196F3"]);
+
+  const circles = svg.selectAll("circle")
+    .data(flatData, d => `${d.year}-${d.state}-${d.gender}`)
+    .enter().append("circle")
+    .attr("transform", d => {
+      const coords = projection([d.longitude, d.latitude]);
+      return coords ? `translate(${coords})` : null;
+    })
+    .attr("r", d => radiusScale(d.cases))
+    .attr("fill", d => colorScale(d.gender))
+    .attr("stroke", "#fff")
+    .attr("stroke-width", 0.5)
+    .append("title")
+    .text(d => `${d.year}-${d.state}-${d.gender}: ${d.cases} total cases`);
+
+  const legend = svg.selectAll(".legend")
+    .data(colorScale.domain())
+    .enter().append("g")
+    .attr("class", "legend")
+    .attr("transform", (d, i) => `translate(0,${i * 20})`);
+
+  legend.append("rect")
+    .attr("x", width - 180)
+    .attr("width", 18)
+    .attr("height", 18)
+    .style("fill", colorScale);
+
+  legend.append("text")
+    .attr("x", width - 156)
+    .attr("y", 9)
+    .attr("dy", ".35em")
+    .style("text-anchor", "start")
+    .text(d => d);
+
+  function update(year) {
+    const yearData = flatData.filter(d => d.year === String(year));
+
+    svg.selectAll("circle")
+      .data(yearData, d => `${d.year}-${d.state}-${d.gender}`)
+      .attr("r", d => radiusScale(d.cases));
+  }
+
+  const initialYear = d3.min(flatData, d => d.year);
+  update(initialYear);
+
+  return Object.assign(svg.node(), { update });
+};
