@@ -85,3 +85,49 @@ return Object.assign(svg.node(), { update });
 
 
 //3.
+chart = {
+  const svg = d3.create("svg")
+      .attr("viewBox", [0, 0, 960, 600]);
+
+  svg.append("path")
+      .datum(topojson.merge(us, us.objects.lower48.geometries))
+      .attr("fill", "#aaa") // Change fill color for the map
+      .attr("d", d3.geoPath());
+
+  svg.append("path")
+      .datum(topojson.mesh(us, us.objects.lower48, (a, b) => a !== b))
+      .attr("fill", "none")
+      .attr("stroke", "#666") // Change stroke color for map borders
+      .attr("stroke-width", 0.5) // Adjust stroke width for map borders
+      .attr("stroke-linejoin", "round")
+      .attr("d", d3.geoPath());
+
+  const g = svg.append("g")
+      .attr("fill", "none")
+      .attr("stroke", "black");
+
+  const dot = g.selectAll("circle")
+    .data(processedData)
+     .join("circle")
+      .attr("transform", d => `translate(${projection([d.longitude, d.latitude])})`)
+      .attr("r", d=>Math.pow(d.cases,1/6)) // Reduce bubble size
+      .attr("fill", "#006400") // Change fill color for circles to dark green
+      .attr("stroke", "#fff") // Change stroke color for circles
+      .attr("stroke-width", 1); // Adjust stroke width for circles
+
+  let previousDate = 2000;
+
+  return Object.assign(svg.node(), {
+    update(date) {
+      dot // enter
+        .filter(d => d.year > previousDate && d.year <= date)
+        .transition().attr("r", d=>Math.pow(d.cases,1/6)) // Adjust size transition for circles
+        .attr("fill", "#006400") // Change fill color transition for circles to dark green
+        .attr("stroke", "#fff"); // Change stroke color transition for circles
+      dot // exit
+        .filter(d => d.year <= previousDate && d.year > date)
+        .transition().attr("r", 0);
+      previousDate = date;
+    }
+  });
+}
