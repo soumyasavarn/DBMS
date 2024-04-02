@@ -230,46 +230,125 @@ return svg.node();
 
 //3.
 chart = {
+// Set the dimensions for the visualization canvas.
 const [mapWidth, mapHeight] = [960, 600];
-const mapProjection = d3.geoAlbersUsa().scale(4 / 3 * mapWidth).translate([mapWidth / 2, mapHeight / 2]);
-const visualizationSvg = d3.create("svg").attr("viewBox", [0, 0, mapWidth, mapHeight]).attr("width", mapWidth).attr("height", mapHeight).attr("style", "max-width: 100%; height: auto;");
 
-visualizationSvg.append("path").datum(stateMesh).attr("fill", "none").attr("stroke", "#777").attr("stroke-width", 0.5).attr("stroke-linejoin", "round").attr("d", d3.geoPath(mapProjection));
+// Configure the map projection to display the USA, adjusting scale and centering based on the canvas size.
+const mapProjection = d3.geoAlbersUsa().scale(4 / 3 * mapWidth).translate([mapWidth / 2, mapHeight / 2]);
+
+// Create the SVG element for the visualization, setting its dimensions and ensuring it's responsive.
+const visualizationSvg = d3.create("svg")
+    .attr("viewBox", [0, 0, mapWidth, mapHeight])
+    .attr("width", mapWidth)
+    .attr("height", mapHeight)
+    .attr("style", "max-width: 100%; height: auto;");
+
+// Draw the outlines of states on the map using a predefined 'stateMesh'. 
+// This gives context for the store locations.
+visualizationSvg.append("path")
+    .datum(stateMesh)
+    .attr("fill", "none")
+    .attr("stroke", "#777")
+    .attr("stroke-width", 0.5)
+    .attr("stroke-linejoin", "round")
+    .attr("d", d3.geoPath(mapProjection));
+
+// Define a diameter for considering when stores are close enough to be in the same cluster.
 const proximityDiameter = 19;
-const locationBubbles = visualizationSvg.append("g").attr("class", "locationBubbles");
+
+// Initialize a group element that will contain all the store location markers.
+const locationBubbles = visualizationSvg.append("g")
+    .attr("class", "locationBubbles");
+
+// Prepare an array to hold clusters of stores based on their geographic proximity.
 const locationClusters = [];
 
+// Iterate through each store to determine its position on the map and cluster stores that are close together.
 walmarts.forEach(store => {
     const [projectedX, projectedY] = mapProjection([store.longitude, store.latitude]);
     const existingCluster = locationClusters.find(cluster => Math.hypot(projectedX - cluster.centerX, projectedY - cluster.centerY) < proximityDiameter);
+    
+    // If the store is close to an existing cluster, add it to that cluster; otherwise, create a new cluster.
     if (existingCluster) {
         existingCluster.storeCount++;
         existingCluster.cumulativeAge += new Date().getFullYear() - new Date(store.date).getFullYear();
     } else {
-        locationClusters.push({ centerX: projectedX, centerY: projectedY, storeCount: 1, cumulativeAge: new Date().getFullYear() - new Date(store.date).getFullYear() });
+        locationClusters.push({
+            centerX: projectedX, 
+            centerY: projectedY, 
+            storeCount: 1, 
+            cumulativeAge: new Date().getFullYear() - new Date(store.date).getFullYear()
+        });
     }
 });
 
+// Calculate the average age of stores in each cluster.
 locationClusters.forEach(cluster => {
     cluster.averageAge = cluster.cumulativeAge / cluster.storeCount;
 });
 
-const ageBasedRadiusScale = d3.scaleLinear().domain([0, d3.max(locationClusters, cluster => cluster.cumulativeAge)]).range([2, proximityDiameter / 2]);
-const ageBasedColorScale = d3.scaleSequential(d3.interpolateInferno).domain([d3.max(locationClusters, cluster => cluster.cumulativeAge), 0]);
+// Define a scale for the radius of the location markers, based on the cumulative age of stores in a cluster.
+const ageBasedRadiusScale = d3.scaleLinear()
+    .domain([0, d3.max(locationClusters, cluster => cluster.cumulativeAge)])
+    .range([2, proximityDiameter / 2]);
 
-locationBubbles.selectAll("circle").data(locationClusters).join("circle").attr("cx", cluster => cluster.centerX).attr("cy", cluster => cluster.centerY).attr("r", cluster => ageBasedRadiusScale(cluster.cumulativeAge)).attr("fill", cluster => ageBasedColorScale(cluster.cumulativeAge)).attr("opacity", 0.7).append("title").text(cluster => `Average Age: ${cluster.averageAge.toFixed(1)} years\nCount: ${cluster.storeCount}`);
+// Define a color scale for the location markers, where darker colors represent older store clusters.
+const ageBasedColorScale = d3.scaleSequential(d3.interpolateInferno)
+    .domain([d3.max(locationClusters, cluster => cluster.cumulativeAge), 0]);
 
-const legend = visualizationSvg.append("g").attr("class", "ageLegend").attr("transform", "translate(580, 20)");
+// Create a marker for each cluster, setting its position, size, and color based on the cluster's characteristics.
+locationBubbles.selectAll("circle")
+    .data(locationClusters)
+    .join("circle")
+    .attr("cx", cluster => cluster.centerX)
+    .attr("cy", cluster => cluster.centerY)
+    .attr("r", cluster => ageBasedRadiusScale(cluster.cumulativeAge))
+    .attr("fill", cluster => ageBasedColorScale(cluster.cumulativeAge))
+    .attr("opacity", 0.7)
+    .append("title")
+    .text(cluster => `Average Age: ${cluster.averageAge.toFixed(1)} years\nCount: ${cluster.storeCount}`);
+
+// Add a legend to the visualization to explain the color coding of the clusters.
+const legend = visualizationSvg.append("g")
+    .attr("class", "ageLegend")
+    .attr("transform", "translate(580, 20)");
+
 const legendWidth = 200, legendHeight = 20;
-const gradientDefinition = legend.append("defs").append("linearGradient").attr("id", "ageGradient").attr("x1", "0%").attr("x2", "100%");
 
-gradientDefinition.selectAll("stop").data(ageBasedColorScale.ticks().map((tick, i, nodes) => ({ offset: `${100 * i / (nodes.length - 1)}%`, color: ageBasedColorScale(tick), value: tick.toFixed(0) }))).join("stop").attr("offset", d => d.offset).attr("stop-color", d => d.color);
+// Define a linear gradient that reflects the age-based color scale for use in the legend.
+const gradientDefinition = legend.append("defs")
+    .append("linearGradient")
+    .attr("id", "ageGradient")
+    .attr("x1", "0%")
+    .attr("x2", "100%");
 
-legend.append("rect").attr("width", legendWidth).attr("height", legendHeight).style("fill", "url(#ageGradient)");
+// Populate the gradient with color stops that match the age-based color scale.
+gradientDefinition.selectAll("stop")
+    .data(ageBasedColorScale.ticks().map((tick, i, nodes) => ({
+        offset: `${100 * i / (nodes.length - 1)}%`, 
+        color: ageBasedColorScale(tick), 
+        value: tick.toFixed(0)
+    })))
+    .join("stop")
+    .attr("offset", d => d.offset)
+    .attr("stop-color", d => d.color);
 
-legend.append("text").attr("x", legendWidth / 2).attr("y", legendHeight + 10).attr("text-anchor", "middle").text("Age of Walmart Locations :: Darker for older ones");
+// Use the defined gradient in a rectangle to visually represent the legend.
+legend.append("rect")
+    .attr("width", legendWidth)
+    .attr("height", legendHeight)
+    .style("fill", "url(#ageGradient)");
 
+// Add text to the legend to label what the gradient represents.
+legend.append("text")
+    .attr("x", legendWidth / 2)
+    .attr("y", legendHeight + 10)
+    .attr("text-anchor", "middle")
+    .text("Age of Walmart Locations :: Darker for older ones");
+
+// Return the SVG node so it can be added to the document.
 return visualizationSvg.node();
+
 
 }
 
