@@ -355,75 +355,162 @@ return visualizationSvg.node();
 
 //4.
 chart ={
- const width = 928, height = 581;
+ // Set the dimensions for the map visualization.
+const width = 928;
+const height = 581;
+
+// Define the geographic projection for the USA map, adjusting scale and positioning.
 const projection = d3.geoAlbersUsa().scale(4 / 3 * width).translate([width / 2, height / 2]);
-const svg = d3.create("svg").attr("viewBox", [0, 0, width, height]).attr("style", "max-width: 100%; height: auto;");
 
-const covid_data = final_data.reduce((acc, row) => {
+// Initialize an SVG container for the visualization with specified dimensions and responsive styling.
+const svg = d3.create("svg")
+    .attr("viewBox", [0, 0, width, height])
+    .attr("width", width)
+    .attr("height", height)
+    .attr("style", "max-width: 100%; height: auto;");
+
+// Process the final COVID-19 data, projecting geographical coordinates to the map's scale.
+const covid_data = [];
+for (let i = 0; i < final_data.length; i++) {
+    const row = final_data[i];
     const projectionResult = projection([row.long, row.lat]);
-    if (!projectionResult) return acc;
-    const { x, y } = projectionResult;
-    const { cases, deaths, fips } = row;
-    const existingData = acc.find(d => d.fips === fips);
+    if (projectionResult === null) continue; // Skip if the projection is not on the map.
+
+    const x = projectionResult[0]; // X-coordinate on the map.
+    const y = projectionResult[1]; // Y-coordinate on the map.
+    const cases = parseInt(row.cases);
+    const deaths = parseInt(row.deaths);
+    const fips = row.fips;
+
+    // Look for existing data entry by FIPS code to avoid duplicates.
+    const existingData = covid_data.find(d => d.fips === fips);
     if (existingData) {
-        existingData.cases = parseInt(cases);
-        existingData.deaths = parseInt(deaths);
+        existingData.cases = cases;
+        existingData.deaths = deaths;
     } else {
-        acc.push({ x, y, fips, cases: parseInt(cases), deaths: parseInt(deaths) });
+        // Add new entry for location.
+        covid_data.push({ x, y, fips, cases, deaths });
     }
-    return acc;
-}, []);
+}
 
-const national_average = covid_data.reduce((total, row) => total + row.cases, 0) / covid_data.length;
+// Calculate the national average of COVID-19 cases for comparison.
+let national_average = covid_data.reduce((acc, row) => acc + row.cases, 0) / covid_data.length;
 
-svg.append("path").datum(stateMesh)
-    .attr("fill", "none").attr("stroke", "#777").attr("stroke-width", 0.5)
-    .attr("stroke-linejoin", "round").attr("d", d3.geoPath(projection));
+// Define color based on cases compared to the national average.
+function colorByCases(cases) {
+    return cases >= national_average ? "#2F4F4F" : "#87CEEB"; // Use Tomato Red for above-average, Sky Blue for below.
+}
 
+// Define circle radius based on cases compared to the national average.
+function radiusByCases(cases) {
+    return cases >= national_average ? 10 : 5; // Larger radius for above-average cases.
+}
+
+// Append the state outlines to the visualization for geographic context.
+svg.append("path")
+    .datum(stateMesh)
+    .attr("fill", "none")
+    .attr("stroke", "#AAA") // Changed to a lighter grey for subtlety.
+    .attr("stroke-width", 0.5)
+    .attr("stroke-linejoin", "round")
+    .attr("d", d3.geoPath(projection));
+
+// Create and append circles for each COVID-19 data point.
 const bubbles = svg.append("g").attr("class", "bubbles");
 
-bubbles.selectAll("circle").data(covid_data).join("circle")
-    .attr("cx", d => d.x).attr("cy", d => d.y)
-    .attr("r", d => (cases, national_average) => {
-        return cases >= national_average ? Math.SQRT2 * 6 : 6;
-    }(d.cases, national_average))
-    .attr("fill", d => (cases, national_average) => {
-        return cases >= national_average ? "pink" : "none";
-    }(d.cases, national_average))
-    .attr("opacity", 0.57);
+bubbles.selectAll("circle")
+    .data(covid_data)
+    .join("circle")
+        .attr("cx", d => d.x)
+        .attr("cy", d => d.y)
+        .attr("r", d => radiusByCases(d.cases))
+        .attr("fill", d => colorByCases(d.cases))
+        .attr("opacity", 0.6) // Adjusted for better visualization.
+        .attr("stroke", "#FFF") // Add white stroke to distinguish overlapping circles.
+        .attr("stroke-width", 1);
 
+// Return the SVG node for rendering.
 return svg.node();
 
 }
 
 //5.
-function createMapChart(finalData, stateMesh) {
-    const w = 928, h = 581, p = d3.geoAlbersUsa().scale(4 / 3 * w).translate([w / 2, h / 2]);
-    const s = d3.create("svg").attr("viewBox", [0, 0, w, h]).attr("style", "max-width:100%;height:auto;");
-    const d = [], c = [], r = d3.scaleLinear().domain([0, d3.max(d, d => d.deaths / d.cases)]).range([0, 30]);
+chart = {
 
-    finalData.forEach(row => {
-        const pr = p([row.long, row.lat]);
-        if (pr) {
-            const [x, y] = pr, cases = parseInt(row.cases), deaths = parseInt(row.deaths), f = row.fips;
-            const e = d.find(e => e.fips === row.fips);
-            e ? (e.cases = cases, e.deaths = deaths) : d.push({ x, y, fips: f, cases, deaths });
+// Set the dimensions for the map and configure the projection to display the USA.
+const width = 928;
+const height = 581;
+const projection = d3.geoAlbersUsa().scale(4 / 3 * width).translate([width / 2, height / 2]);
+
+// Initialize the SVG container for the visualization, ensuring it's responsive.
+const svg = d3.create("svg")
+    .attr("viewBox", [0, 0, width, height])
+    .attr("width", width)
+    .attr("height", height)
+    .attr("style", "max-width: 100%; height: auto;");
+
+// Prepare the COVID-19 data for visualization.
+const covid_data = [];
+final_data.forEach(row => {
+    const projectionResult = projection([row.long, row.lat]);
+    if (projectionResult) { // Skip if coordinates cannot be projected onto the map.
+        const [x, y] = projectionResult; // Extract projected coordinates.
+        const cases = parseInt(row.cases), deaths = parseInt(row.deaths);
+
+        // Check for existing data entry to avoid duplication.
+        let existingData = covid_data.find(d => d.fips === row.fips);
+        if (existingData) {
+            existingData.cases = cases;
+            existingData.deaths = deaths;
+        } else {
+            // Push new entry if no duplication found.
+            covid_data.push({ x, y, fips: row.fips, cases, deaths });
         }
-    });
+    }
+});
 
-    let na = 0;
-    d.forEach(row => { na += row.cases; });
-    na /= d.length;
-    console.log("National Average Cases:", na);
+// Calculate the national average of cases.
+let national_average = covid_data.reduce((total, d) => total + d.cases, 0) / covid_data.length;
 
-    d.forEach(e => { e.deathRatio = e.deaths / e.cases; });
-    const getColor = deathRatio => deathRatio >= 0.05 ? "green" : "lightblue";
+// Enhance the data with the death ratio (deaths per case).
+covid_data.forEach(d => d.deathRatio = d.deaths / d.cases);
 
-    s.append("path").datum(stateMesh).attr("fill", "none").attr("stroke", "#777").attr("stroke-width", 0.5).attr("stroke-linejoin", "round").attr("d", d3.geoPath(p));
+// Define the color based on the death ratio, using a simple threshold.
+function colors(deathRatio) {
+    return deathRatio >= 0.05 ? "#800000" : "#2F4F4F"; // Maroon for high death ratio, dark slate gray for lower.
+}
 
-    s.append("g").attr("class", "bubbles").selectAll("circle").data(d).join("circle").attr("cx", d => d.x).attr("cy", d => d.y).attr("r", d => r(d.deathRatio)).attr("fill", d => getColor(d.deathRatio)).attr("opacity", 0.56);
+// Scale the radius of circles based on the death ratio.
+const radiusScale = d3.scaleLinear()
+    .domain([0, d3.max(covid_data, d => d.deathRatio)])
+    .range([0, 30]);
 
-    return s.node();
+// Sort data to ensure smaller circles (lower death ratio) are drawn on top.
+covid_data.sort((a, b) => b.deathRatio - a.deathRatio);
+
+// Draw state outlines for geographic context.
+svg.append("path")
+    .datum(stateMesh)
+    .attr("fill", "none")
+    .attr("stroke", "#777")
+    .attr("stroke-width", 0.5)
+    .attr("stroke-linejoin", "round")
+    .attr("d", d3.geoPath(projection));
+
+// Draw bubbles for each data point, colored and sized by death ratio.
+const bubbles = svg.append("g").attr("class", "bubbles");
+bubbles.selectAll("circle")
+    .data(covid_data)
+    .join("circle")
+        .attr("cx", d => d.x)
+        .attr("cy", d => d.y)
+        .attr("r", d => radiusScale(d.deathRatio))
+        .attr("fill", d => colors(d.deathRatio))
+        .attr("opacity", 0.7); // Semi-transparent for visual overlap.
+
+// Return the SVG node for embedding or further manipulation.
+return svg.node();
+
 }
 
 
