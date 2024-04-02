@@ -113,54 +113,115 @@ return svgContainer.node();
 //2.
 
 chart = {
-   const width = 960, height = 600;
+   // Define the dimensions for the map.
+const width = 960, height = 600;
+
+// Configure the map's projection as Albers USA, setting scale and center based on the dimensions.
 const projection = d3.geoAlbersUsa().scale(4 / 3 * width).translate([width / 2, height / 2]);
-const svg = d3.create("svg").attr("viewBox", [0, 0, width, height]).attr("style", "max-width: 100%; height: auto;");
 
-svg.append("path").datum(stateMesh).attr("fill", "none").attr("stroke", "#777").attr("stroke-width", 0.5).attr("stroke-linejoin", "round").attr("d", d3.geoPath(projection));
+// Initialize an SVG container for the map with a responsive style.
+const svg = d3.create("svg")
+    .attr("viewBox", [0, 0, width, height])
+    .attr("style", "max-width: 100%; height: auto;");
 
+// Draw state borders using a provided 'stateMesh' object. This outlines states with a specific stroke style.
+svg.append("path")
+    .datum(stateMesh)
+    .attr("fill", "none")
+    .attr("stroke", "#777")
+    .attr("stroke-width", 0.5)
+    .attr("stroke-linejoin", "round")
+    .attr("d", d3.geoPath(projection));
+
+// Define a fixed diameter for bubbles used in clustering.
 const diameter = 19;
-const bubbles = svg.append("g").attr("class", "bubbles");
+
+// Create a group to hold all bubble elements.
+const bubbles = svg.append("g")
+    .attr("class", "bubbles");
+
+// Initialize an array to hold data about clusters of Walmart locations.
 const aggregatedAgesCluster = [];
 
+// Iterate over each Walmart location to project its coordinates and aggregate it into clusters based on proximity.
 walmarts.forEach(location => {
     const [x, y] = projection([location.longitude, location.latitude]);
+    // Find an existing cluster within the defined diameter from this location.
     const existingAggregation = aggregatedAgesCluster.find(a => Math.hypot(x - a.x, y - a.y) < diameter);
     
+    // If a cluster exists, update its count and total age. Otherwise, create a new cluster.
     if (existingAggregation) {
         existingAggregation.count++;
         existingAggregation.totalAge += new Date().getFullYear() - new Date(location.date).getFullYear();
     } else {
-        aggregatedAgesCluster.push({ x, y, count: 1, totalAge: new Date().getFullYear() - new Date(location.date).getFullYear() });
+        aggregatedAgesCluster.push({
+            x, y,
+            count: 1,
+            totalAge: new Date().getFullYear() - new Date(location.date).getFullYear()
+        });
     }
 });
 
+// Calculate the average age for each cluster.
 aggregatedAgesCluster.forEach(aggregation => {
     aggregation.averageAge = aggregation.totalAge / aggregation.count;
 });
 
+// Set up a radius scale for bubbles based on the average age of clusters, adjusting bubble size accordingly.
 const radiusScale = d3.scaleSqrt().domain([0, d3.max(aggregatedAgesCluster, d => d.averageAge)]).range([0, diameter / 2]);
+
+// Define a color scale to visually differentiate clusters based on their average age, using a predefined color interpolator.
 const colorScale = d3.scaleSequential(d3.interpolateMagma).domain(d3.extent(aggregatedAgesCluster, d => d.averageAge).reverse());
 
+// Create bubbles for each cluster, setting their position, radius, and color based on the calculated scales.
 bubbles.selectAll("circle").data(aggregatedAgesCluster).join("circle")
-    .attr("cx", d => d.x).attr("cy", d => d.y)
+    .attr("cx", d => d.x)
+    .attr("cy", d => d.y)
     .attr("r", d => radiusScale(d.averageAge))
     .attr("fill", d => colorScale(d.averageAge))
     .attr("opacity", 0.7)
-    .append("title").text(d => `Average Age: ${d.averageAge.toFixed(1)} years\nLocations Aggregated: ${d.count}`);
+    .append("title")
+    .text(d => `Average Age: ${d.averageAge.toFixed(1)} years\nLocations Aggregated: ${d.count}`);
 
-const legend = svg.append("g").attr("class", "legend").attr("transform", "translate(580, 20)");
+// Set up a legend to help interpret the color scale of the clusters.
+const legend = svg.append("g")
+    .attr("class", "legend")
+    .attr("transform", "translate(580, 20)");
+
 const legendWidth = 200, legendHeight = 20;
+
+// Define a linear gradient for the legend based on the color scale.
 const defs = legend.append("defs");
-const linearGradient = defs.append("linearGradient").attr("id", "color-gradient").attr("x1", "0%").attr("x2", "100%");
+const linearGradient = defs.append("linearGradient")
+    .attr("id", "color-gradient")
+    .attr("x1", "0%")
+    .attr("x2", "100%");
 
-linearGradient.selectAll("stop").data(colorScale.ticks().map((tick, i, nodes) => ({ offset: `${100 * i / (nodes.length - 1)}%`, color: colorScale(tick), value: tick.toFixed(0) }))).join("stop")
-    .attr("offset", d => d.offset).attr("stop-color", d => d.color);
+// Populate the gradient with color stops corresponding to the color scale ticks.
+linearGradient.selectAll("stop")
+    .data(colorScale.ticks().map((tick, i, nodes) => ({
+        offset: `${100 * i / (nodes.length - 1)}%`,
+        color: colorScale(tick),
+        value: tick.toFixed(0)
+    })))
+    .join("stop")
+    .attr("offset", d => d.offset)
+    .attr("stop-color", d => d.color);
 
-legend.append("rect").attr("width", legendWidth).attr("height", legendHeight).style("fill", "url(#color-gradient)");
+// Add a rectangle filled with the gradient to visually represent the legend.
+legend.append("rect")
+    .attr("width", legendWidth)
+    .attr("height", legendHeight)
+    .style("fill", "url(#color-gradient)");
 
-legend.append("text").attr("x", legendWidth / 2).attr("y", legendHeight + 10).attr("text-anchor", "middle").text("Age of Walmart Locations (Clustered)");
+// Add descriptive text below the legend to indicate what it represents.
+legend.append("text")
+    .attr("x", legendWidth / 2)
+    .attr("y", legendHeight + 10)
+    .attr("text-anchor", "middle")
+    .text("Age of Walmart Locations (Clustered)");
 
+// Return the SVG node for insertion into the document.
 return svg.node();
 
 }
