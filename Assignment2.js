@@ -1,41 +1,110 @@
 //1.
 
 chart = {
-    const width = 960, height = 600;
-const projection = d3.geoAlbersUsa().scale(4 / 3 * width).translate([width / 2, height / 2]);
-const svg = d3.create("svg").attr("viewBox", [0, 0, width, height]).attr("style", "max-width: 100%; height: auto;");
+   // Set the dimensions for the map.
+const mapWidth = 960;
+const mapHeight = 600;
+// Define the map projection to be used, setting its scale and center.
+const mapProjection = d3.geoAlbersUsa().scale(4 / 3 * mapWidth).translate([mapWidth / 2, mapHeight / 2]);
 
-svg.append("path").datum(stateMesh).attr("fill", "none").attr("stroke", "#777").attr("stroke-width", 0.5).attr("stroke-linejoin", "round").attr("d", d3.geoPath(projection));
+// Initialize a color scale for the visualization. The scale is sequential,
+// meaning it represents data along a gradient. The interpolator defines the color scheme,
+// and the domain is set based on the age of Walmart locations.
+const colorGradient = d3.scaleSequential()
+    .interpolator(d3.interpolateViridis) // This can be changed to use a different color palette.
+    .domain([d3.max(walmarts, d => new Date().getFullYear() - new Date(d.date).getFullYear()), 0]);
 
-const bubbles = svg.append("g").attr("class", "bubbles");
+// Create the SVG container for the visualization. The viewBox and dimensions are set,
+// and styling is applied to ensure responsiveness.
+const svgContainer = d3.create("svg")
+    .attr("viewBox", `0 0 ${mapWidth} ${mapHeight}`)
+    .attr("width", mapWidth)
+    .attr("height", mapHeight)
+    .attr("style", "max-width: 100%; height: auto;");
 
-function findBubbleRadius(date) {
-    const ageInYears = (new Date() - new Date(date)) / (1000 * 60 * 60 * 24 * 365);
-    return Math.sqrt(ageInYears) * 0.75; 
+// Draw state borders on the map. This uses the stateMesh data to draw paths.
+// The stroke and fill styles define the appearance of these borders.
+svgContainer.append("path")
+    .datum(stateMesh)
+    .attr("fill", "none")
+    .attr("stroke", "#777")
+    .attr("stroke-width", 0.5)
+    .attr("stroke-linejoin", "round")
+    .attr("d", d3.geoPath(mapProjection));
+
+// Create a group element to contain the bubbles that represent Walmart locations.
+// Each bubble's size and position are determined by Walmart location data.
+const locationBubbles = svgContainer.append("g")
+    .attr("class", "locationBubbles");
+
+// Define a function to calculate the radius of each bubble. The radius is
+// proportional to the age of the Walmart location, providing a visual representation
+// of how long each location has been established.
+function calculateRadius(date) {
+    const currentDate = new Date();
+    const startDate = new Date(date);
+    const ageYears = (currentDate - startDate) / (1000 * 60 * 60 * 24 * 365); // Convert milliseconds to years
+    
+    const scalingFactor = 0.75; // Adjusts the scale of the bubble sizes.
+    return Math.sqrt(ageYears) * scalingFactor; // Square root scaling for a visually appealing distribution.
 }
 
-bubbles.selectAll("circle").data(walmarts).join("circle")
-    .attr("cx", d => projection([d.longitude, d.latitude])[0])
-    .attr("cy", d => projection([d.longitude, d.latitude])[1])
-    .attr("r", d => findBubbleRadius(d.date))
-    .attr("fill", d => d3.interpolateViridis(new Date().getFullYear() - new Date(d.date).getFullYear()))
-    .attr("opacity", 0.7)
-    .append("title")
-    .text(d => `Location: ${d.latitude}, ${d.longitude}\nEstablished: ${d.date}`);
+// Create the bubbles for each Walmart location. The bubbles are positioned
+// based on geographical coordinates and colored according to their age.
+locationBubbles.selectAll("circle")
+    .data(walmarts)
+    .join("circle")
+        .attr("cx", d => mapProjection([d.longitude, d.latitude])[0])
+        .attr("cy", d => mapProjection([d.longitude, d.latitude])[1])
+        .attr("r", d => calculateRadius(d.date)) // Set radius based on location age.
+        .attr("fill", d => colorGradient(new Date().getFullYear() - new Date(d.date).getFullYear()))
+        .attr("opacity", 0.7)
+        .append("title") // Tooltip showing latitude, longitude, and establishment date.
+            .text(d => `Location: ${d.latitude}, ${d.longitude}\nOpened: ${d.date}`);
 
-const legend = svg.append("g").attr("class", "legend").attr("transform", "translate(580, 20)");
-const defs = legend.append("defs");
-const linearGradient = defs.append("linearGradient").attr("id", "color-gradient").attr("x1", "0%").attr("x2", "100%");
+// Create a legend for the color gradient, helping users interpret the color scheme.
+const scaleLegend = svgContainer.append("g")
+    .attr("class", "scaleLegend")
+    .attr("transform", "translate(580, 20)");
 
-linearGradient.selectAll("stop").data(d3.ticks(0, new Date().getFullYear() - d3.max(walmarts, d => new Date(d.date).getFullYear()), 10)).join("stop")
-    .attr("offset", (d, i, nodes) => `${100 * i / (nodes.length - 1)}%`)
-    .attr("stop-color", d => d3.interpolateViridis(d))
-    .attr("stop-opacity", 1);
+// Define dimensions for the legend.
+const legendDims = { width: 200, height: 20 };
 
-legend.append("rect").attr("width", 200).attr("height", 20).style("fill", "url(#color-gradient)");
-legend.append("text").attr("x", 90).attr("y", 35).attr("text-anchor", "middle").text("Age of Walmart Locations");
+// Define a linear gradient for the color scale. This gradient is used in the legend
+// to represent the range of values (age of locations) visually.
+const gradientDef = scaleLegend.append("defs");
+const gradient = gradientDef.append("linearGradient")
+    .attr("id", "gradientColors")
+    .attr("x1", "0%")
+    .attr("x2", "100%");
 
-return svg.node();
+// Populate the gradient with color stops, matching the color scale.
+gradient.selectAll("stop")
+    .data(colorGradient.ticks().map((tick, index, nodes) => ({
+        offset: `${100 * index / (nodes.length - 1)}%`,
+        color: colorGradient(tick),
+        value: tick.toFixed(0)
+    })))
+    .join("stop")
+        .attr("offset", d => d.offset)
+        .attr("stop-color", d => d.color);
+
+// Add a rectangle filled with the linear gradient to the legend,
+// and label it to indicate what the colors represent.
+scaleLegend.append("rect")
+    .attr("width", legendDims.width)
+    .attr("height", legendDims.height)
+    .style("fill", "url(#gradientColors)");
+
+// Add explanatory text below the legend.
+scaleLegend.append("text")
+    .attr("x", legendDims.width / 2)
+    .attr("y", legendDims.height + 11)
+    .attr("text-anchor", "middle")
+    .text("Age of Walmart Locations (Darker indicates older)");
+
+// The svgContainer with all elements is returned for display.
+return svgContainer.node();
 
 }
 
