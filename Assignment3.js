@@ -1,47 +1,60 @@
 //1.
 chart = {
-  const svg = d3.create("svg")
+ // Create an SVG container for the map visualization.
+const svg = d3.create("svg")
       .attr("viewBox", [0, 0, 960, 600]);
 
-  svg.append("path")
+// Add a path element to draw the merged states of the US. This forms the main landmass.
+// `topojson.merge` combines geometries from a TopoJSON object into a single geometry, which is useful for creating a unified map background.
+svg.append("path")
       .datum(topojson.merge(us, us.objects.lower48.geometries))
-      .attr("fill", "#ddd")
-      .attr("d", d3.geoPath());
+      .attr("fill", "#ddd") // Set the fill color for the merged states.
+      .attr("d", d3.geoPath()); // Use the geographic path generator to convert GeoJSON to SVG path data.
 
-  svg.append("path")
+// Add another path element to outline the states. This differentiates the states visually.
+// `topojson.mesh` creates a mesh for the borders between states, with a predicate function to exclude borders shared by the same state (a !== b).
+svg.append("path")
       .datum(topojson.mesh(us, us.objects.lower48, (a, b) => a !== b))
       .attr("fill", "none")
-      .attr("stroke", "white")
-      .attr("stroke-linejoin", "round")
-      .attr("d", d3.geoPath());
+      .attr("stroke", "white") // Set the stroke color for state borders.
+      .attr("stroke-linejoin", "round") // Smooths the corners where path segments meet.
+      .attr("d", d3.geoPath()); // Convert geographic paths to SVG paths.
 
-  const g = svg.append("g")
+// Prepare a group element (`<g>`) to contain dynamically added circles (dots) representing data points.
+const g = svg.append("g")
       .attr("fill", "none")
-      .attr("stroke", "green");
+      .attr("stroke", "green"); // Set the stroke color for the circles to green.
 
-  const dot = g.selectAll("circle")
+// Bind data to circle elements within the group, setting their initial position based on data.
+const dot = g.selectAll("circle")
     .data(data)
     .join("circle")
-      .attr("transform", d => `translate(${d})`);
+      .attr("transform", d => `translate(${d})`); // Position each circle according to its data.
 
-  svg.append("circle")
+// Add an individual blue circle for a specific data point, likely to highlight it or for testing.
+svg.append("circle")
       .attr("fill", "blue")
-      .attr("transform", `translate(${data[0]})`)
-      .attr("r", 3);
+      .attr("transform", `translate(${data[0]})`) // Position it according to the first item in the data array.
+      .attr("r", 3); // Set the radius of the circle.
 
-  let previousDate = -Infinity;
+// Initialize a variable to keep track of the previous date in the dataset.
+let previousDate = -Infinity;
 
-  return Object.assign(svg.node(), {
+// Augment the SVG node with an `update` method to change the visualization based on a new date.
+return Object.assign(svg.node(), {
     update(date) {
-      dot // enter
-        .filter(d => d.date > previousDate && d.date <= date)
-        .transition().attr("r", 3);
-      dot // exit
-        .filter(d => d.date <= previousDate && d.date > date)
-        .transition().attr("r", 0);
+      // Enter selection: Update circles representing data points that have become relevant between the previous and new dates.
+      dot.filter(d => d.date > previousDate && d.date <= date)
+        .transition().attr("r", 3); // Increase radius to make these points visible.
+
+      // Exit selection: Hide circles representing data points that are no longer relevant.
+      dot.filter(d => d.date <= previousDate && d.date > date)
+        .transition().attr("r", 0); // Decrease radius to hide these points.
+
+      // Update the `previousDate` to the new date after changes have been applied.
       previousDate = date;
     }
-  });
+});
 }
 
 //2.
